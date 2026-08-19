@@ -65,14 +65,16 @@ func (s *BatchService) Import(ctx context.Context, req BatchImportRequest) (*dom
 		DataVersion:  domain.DataVersion,
 	}
 
-	_ = s.store.WithTx(ctx, func(tx store.Tx) error {
+	if err := s.store.WithTx(ctx, func(tx store.Tx) error {
 		if err := tx.SaveBatch(ctx, batch); err != nil {
 			return fmt.Errorf("save batch: %w", err)
 		}
 		audit := auditlog.NewEntry(batch.ID, "batch", auditlog.ActionBatchImport, req.WindowID, now,
 			fmt.Sprintf("%d success, %d fail", result.SuccessCount, result.FailureCount))
 		return tx.SaveAudit(ctx, audit)
-	})
+	}); err != nil {
+		return nil, fmt.Errorf("save import batch: %w", err)
+	}
 
 	return result, nil
 }

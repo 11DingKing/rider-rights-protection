@@ -246,12 +246,16 @@ func (s *ItemService) Complete(ctx context.Context, id, actor string) (*domain.R
 func (s *ItemService) updateItemWithAudit(ctx context.Context, item *domain.RightsCase, actor, action, details string) error {
 	now := s.clock.Now()
 	if err := s.store.WithTx(ctx, func(tx store.Tx) error {
-		return tx.UpdateItem(ctx, item)
-	}); err != nil {
-		return fmt.Errorf("update item: %w", err)
-	}
-	return s.store.WithTx(ctx, func(tx store.Tx) error {
+		if err := tx.UpdateItem(ctx, item); err != nil {
+			return fmt.Errorf("update item: %w", err)
+		}
 		audit := auditlog.NewEntry(item.ID, "item", action, actor, now, details)
-		return tx.SaveAudit(ctx, audit)
-	})
+		if err := tx.SaveAudit(ctx, audit); err != nil {
+			return fmt.Errorf("save audit: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("update item with audit: %w", err)
+	}
+	return nil
 }
