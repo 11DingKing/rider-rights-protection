@@ -67,6 +67,17 @@ func (s *EscalationService) escalateItem(ctx context.Context, item *domain.Right
 		NewDeadline: newDeadline,
 		DataVersion: domain.DataVersion,
 	}
+	referral := &domain.Referral{
+		ID:             uuid.NewString(),
+		ItemID:         item.ID,
+		LeadDepartment: newLead,
+		CoDepartments:  append([]string(nil), item.CoDepartments...),
+		RuleVersion:    item.RuleVersion,
+		AdjudicatedAt:  now,
+		AdjudicatedBy:  "system_escalation",
+		IsCurrent:      true,
+		DataVersion:    domain.DataVersion,
+	}
 
 	item.LeadDepartment = newLead
 	item.EscalationLevel = newLevel
@@ -82,6 +93,9 @@ func (s *EscalationService) escalateItem(ctx context.Context, item *domain.Right
 		}
 		if err := tx.MarkAssignmentSuperseded(ctx, item.ID); err != nil {
 			return fmt.Errorf("mark referral superseded: %w", err)
+		}
+		if err := tx.SaveAssignment(ctx, referral); err != nil {
+			return fmt.Errorf("save escalation referral: %w", err)
 		}
 		if err := tx.UpdateItem(ctx, item); err != nil {
 			return fmt.Errorf("update item: %w", err)

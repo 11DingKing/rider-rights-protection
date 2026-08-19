@@ -30,9 +30,18 @@ func (s *QueryService) GetItemDetail(ctx context.Context, id string) (*ItemDetai
 	if err != nil {
 		return nil, fmt.Errorf("get item: %w", err)
 	}
-	assignments, _ := s.store.GetAssignments(ctx, id)
-	escalations, _ := s.store.GetEscalations(ctx, id)
-	audit, _, _ := s.store.ListAudit(ctx, domain.AuditFilter{EntityID: id, PageSize: 100})
+	assignments, err := s.store.GetAssignments(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get assignments: %w", err)
+	}
+	escalations, err := s.store.GetEscalations(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get escalations: %w", err)
+	}
+	audit, _, err := s.store.ListAudit(ctx, domain.AuditFilter{EntityID: id, PageSize: 100})
+	if err != nil {
+		return nil, fmt.Errorf("list audit: %w", err)
+	}
 	return &ItemDetail{
 		RightsCase:  item,
 		Assignments: assignments,

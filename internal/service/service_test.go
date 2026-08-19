@@ -198,6 +198,10 @@ func TestEscalationService_OverdueUpgradePersist(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, escList, 1)
 	assert.Equal(t, 1, escList[0].ToLevel)
+	current, err := st.GetCurrentAssignment(ctx, item.ID)
+	require.NoError(t, err)
+	assert.Equal(t, loaded.LeadDepartment, current.LeadDepartment)
+	assert.True(t, current.IsCurrent)
 }
 
 func TestEscalationService_MultiLevelEscalation(t *testing.T) {
