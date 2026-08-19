@@ -57,7 +57,11 @@ func New(cfg *config.Config, st store.Store, clk clock.Clock, logger *applog.Log
 	if !filepath.IsAbs(authPath) && cfg.Storage.DataDir != "" {
 		authPath = filepath.Join(cfg.Storage.DataDir, filepath.Base(authPath))
 	}
-	authStore, err := auth.Open(authPath)
+	bootstrap := make([]auth.BootstrapUser, 0, len(cfg.Auth.BootstrapUsers))
+	for _, user := range cfg.Auth.BootstrapUsers {
+		bootstrap = append(bootstrap, auth.BootstrapUser{ID: user.ID, Username: user.Username, Password: user.Password, Role: auth.Role(user.Role)})
+	}
+	authStore, err := auth.Open(authPath, bootstrap...)
 	if err != nil {
 		panic(fmt.Errorf("open auth store: %w", err))
 	}

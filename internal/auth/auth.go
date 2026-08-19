@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var (
@@ -32,9 +34,18 @@ const (
 type User struct {
 	ID           string `json:"id"`
 	Username     string `json:"username"`
-	PasswordHash string `json:"password_hash"`
+	PasswordHash string `json:"-"`
 	Role         Role   `json:"role"`
 	Disabled     bool   `json:"disabled"`
+}
+
+// BootstrapUser is used only on first startup to provision an operator account.
+// The plaintext password is never persisted; only the bcrypt hash is stored.
+type BootstrapUser struct {
+	ID       string
+	Username string
+	Password string
+	Role     Role
 }
 
 type Session struct {
@@ -56,22 +67,46 @@ type Store struct {
 	data diskState
 }
 
-func Open(path string) (*Store, error) {
+func Open(path string, bootstrap ...BootstrapUser) (*Store, error) {
 	s := &Store{path: path}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
-	if len(s.data.Users) == 0 {
-		s.data.Users = []User{
-			{ID: "u-admin", Username: "admin", PasswordHash: hashPassword("admin-change-me"), Role: RoleAdmin},
-			{ID: "u-prosecutor", Username: "prosecutor", PasswordHash: hashPassword("prosecutor-demo"), Role: RoleProsecutor},
-			{ID: "u-counselor", Username: "counselor", PasswordHash: hashPassword("counselor-demo"), Role: RoleCounselor},
+	if len(s.data.Users) == 0 && len(bootstrap) > 0 {
+		seenIDs := make(map[string]struct{}, len(bootstrap))
+		seenNames := make(map[string]struct{}, len(bootstrap))
+		for _, seed := range bootstrap {
+			if seed.ID == "" || seed.Username == "" || len(seed.Password) < 12 || !validRole(seed.Role) {
+				return nil, fmt.Errorf("invalid bootstrap user %q: id, username, role and a 12-character password are required", seed.Username)
+			}
+			if _, exists := seenIDs[seed.ID]; exists {
+				return nil, fmt.Errorf("duplicate bootstrap user id %q", seed.ID)
+			}
+			if _, exists := seenNames[seed.Username]; exists {
+				return nil, fmt.Errorf("duplicate bootstrap username %q", seed.Username)
+			}
+			seenIDs[seed.ID] = struct{}{}
+			seenNames[seed.Username] = struct{}{}
+			hash, err := hashPassword(seed.Password)
+			if err != nil {
+				return nil, fmt.Errorf("hash bootstrap password for %s: %w", seed.Username, err)
+			}
+			s.data.Users = append(s.data.Users, User{ID: seed.ID, Username: seed.Username, PasswordHash: hash, Role: seed.Role})
 		}
 		if err := s.persist(); err != nil {
 			return nil, err
 		}
 	}
 	return s, nil
+}
+
+func validRole(role Role) bool {
+	switch role {
+	case RoleRider, RoleProsecutor, RoleCounselor, RoleAdmin:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Store) load() error {
@@ -108,9 +143,12 @@ func (s *Store) persist() error {
 	return nil
 }
 
-func hashPassword(password string) string {
-	sum := sha256.Sum256([]byte(password))
-	return hex.EncodeToString(sum[:])
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("bcrypt password hash: %w", err)
+	}
+	return string(hash), nil
 }
 
 func tokenHash(token string) string {
@@ -130,7 +168,7 @@ func (s *Store) Authenticate(username, password string) (User, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, user := range s.data.Users {
-		if user.Username == username && !user.Disabled && user.PasswordHash == hashPassword(password) {
+		if user.Username == username && !user.Disabled && bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil {
 			return user, nil
 		}
 	}

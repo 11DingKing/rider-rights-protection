@@ -71,6 +71,7 @@ migrations/
 | business.default_deadline | RIDERGUARD_BUSINESS_DEFAULT_DEADLINE | 72h | 默认承诺时限 |
 | business.escalation_deadline_extension | RIDERGUARD_BUSINESS_ESCALATION_DEADLINE_EXTENSION | 48h | 升级后新承诺时限 |
 | business.max_escalation_level | RIDERGUARD_BUSINESS_MAX_ESCALATION_LEVEL | 3 | 最大升级层级 |
+| auth.bootstrap_users | RIDERGUARD_AUTH_BOOTSTRAP_USERS | 无默认值 | 首次启动时通过 JSON 注入账号；口令只用于生成 bcrypt 哈希，不写入配置文件 |
 
 ## 迁移方式
 
@@ -85,8 +86,10 @@ go build ./...
 # 初始化数据目录并写入默认分办规则
 go run ./cmd/riderctl init -data-dir ./data
 
-# 启动 HTTP 服务（默认端口 49660）
-go run ./cmd/riderguard config.example.yaml
+# 启动 HTTP 服务（默认端口 49660）。首次启动必须注入至少一个账号；请在 shell
+# 或密钥管理器中提供真实口令，不要把它写入配置文件或提交到 Git。
+RIDERGUARD_AUTH_BOOTSTRAP_USERS='[{"id":"u-admin","username":"admin","password":"<strong-password>","role":"admin"}]' \\
+  go run ./cmd/riderguard config.example.yaml
 
 # 或用环境变量覆盖端口与数据目录
 RIDERGUARD_SERVER_PORT=49660 RIDERGUARD_STORAGE_DATA_DIR=./data go run ./cmd/riderguard

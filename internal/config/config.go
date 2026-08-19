@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -20,9 +21,18 @@ type Config struct {
 }
 
 type AuthConfig struct {
-	StorePath  string        `yaml:"store_path"`
-	SessionTTL time.Duration `yaml:"session_ttl"`
-	Required   bool          `yaml:"required"`
+	StorePath      string              `yaml:"store_path"`
+	SessionTTL     time.Duration       `yaml:"session_ttl"`
+	Required       bool                `yaml:"required"`
+	BootstrapUsers []AuthBootstrapUser `yaml:"-"`
+	BootstrapError string              `yaml:"-"`
+}
+
+type AuthBootstrapUser struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Role     string `json:"role"`
 }
 
 type ServerConfig struct {
@@ -132,6 +142,9 @@ func (c *Config) Validate() error {
 	if c.Auth.StorePath == "" || c.Auth.SessionTTL <= 0 {
 		return fmt.Errorf("auth.store_path and auth.session_ttl must be configured")
 	}
+	if c.Auth.BootstrapError != "" {
+		return fmt.Errorf("auth bootstrap users are invalid: %s", c.Auth.BootstrapError)
+	}
 	return nil
 }
 
@@ -157,6 +170,7 @@ func applyEnvOverrides(cfg *Config) {
 		"RIDERGUARD_BUSINESS_MAX_ESCALATION_LEVEL":          "",
 		"RIDERGUARD_AUTH_STORE_PATH":                        "",
 		"RIDERGUARD_AUTH_SESSION_TTL":                       "",
+		"RIDERGUARD_AUTH_BOOTSTRAP_USERS":                   "",
 	}
 
 	if v := os.Getenv("RIDERGUARD_SERVER_PORT"); v != "" {
@@ -247,6 +261,14 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("RIDERGUARD_AUTH_SESSION_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Auth.SessionTTL = d
+		}
+	}
+	if v := os.Getenv("RIDERGUARD_AUTH_BOOTSTRAP_USERS"); v != "" {
+		var users []AuthBootstrapUser
+		if err := json.Unmarshal([]byte(v), &users); err != nil {
+			cfg.Auth.BootstrapError = err.Error()
+		} else {
+			cfg.Auth.BootstrapUsers = users
 		}
 	}
 	_ = envMap

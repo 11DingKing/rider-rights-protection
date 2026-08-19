@@ -25,3 +25,5 @@ auth:
   store_path: ./data/auth.json
   session_ttl: 8h
   required: true
+  # On first startup, set RIDERGUARD_AUTH_BOOTSTRAP_USERS to a JSON array of
+  # accounts. Passwords are hashed with bcrypt and are not stored in YAML.

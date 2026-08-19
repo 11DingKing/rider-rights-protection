@@ -1,25 +1,34 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestLoginExpiryAndLogoutRevocationPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "auth.json")
-	st, err := Open(path)
+	st, err := Open(path, testUsers()...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	user, token, expires, err := st.Login("prosecutor", "prosecutor-demo", time.Hour, now)
+	user, token, expires, err := st.Login("prosecutor", "test-prosecutor-password", time.Hour, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if user.Role != RoleProsecutor || !expires.Equal(now.Add(time.Hour)) {
 		t.Fatalf("unexpected login result: %+v %s", user, expires)
+	}
+	encoded, err := json.Marshal(user)
+	if err != nil || string(encoded) == "" || string(encoded) == "{}" {
+		t.Fatalf("marshal user: %s (%v)", encoded, err)
+	}
+	if strings.Contains(string(encoded), "password_hash") {
+		t.Fatalf("password hash leaked in user JSON: %s", encoded)
 	}
 	if got, err := st.Resolve(token, now.Add(30*time.Minute)); err != nil || got.ID != user.ID {
 		t.Fatalf("resolve: %+v %v", got, err)
@@ -40,12 +49,12 @@ func TestLoginExpiryAndLogoutRevocationPersist(t *testing.T) {
 }
 
 func TestExpiredSessionAndRoleGuard(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "auth.json"))
+	st, err := Open(filepath.Join(t.TempDir(), "auth.json"), testUsers()...)
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	user, token, _, err := st.Login("counselor", "counselor-demo", time.Minute, now)
+	user, token, _, err := st.Login("counselor", "test-counselor-password", time.Minute, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,5 +63,13 @@ func TestExpiredSessionAndRoleGuard(t *testing.T) {
 	}
 	if err := RequireRole(user, RoleProsecutor); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
+func testUsers() []BootstrapUser {
+	return []BootstrapUser{
+		{ID: "u-admin", Username: "admin", Password: "test-admin-password", Role: RoleAdmin},
+		{ID: "u-prosecutor", Username: "prosecutor", Password: "test-prosecutor-password", Role: RoleProsecutor},
+		{ID: "u-counselor", Username: "counselor", Password: "test-counselor-password", Role: RoleCounselor},
 	}
 }

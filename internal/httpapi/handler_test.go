@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"riderguard/internal/applog"
+	"riderguard/internal/auth"
 	"riderguard/internal/config"
 	"riderguard/internal/domain"
 	"riderguard/internal/httpapi"
@@ -44,6 +45,11 @@ func setupHTTPTest(t *testing.T) (*httptest.Server, *repo.Store, *clock.Mock) {
 	require.NoError(t, err)
 
 	cfg := config.Defaults()
+	cfg.Auth.BootstrapUsers = []config.AuthBootstrapUser{
+		{ID: "u-admin", Username: "admin", Password: "test-admin-password", Role: string(auth.RoleAdmin)},
+		{ID: "u-prosecutor", Username: "prosecutor", Password: "test-prosecutor-password", Role: string(auth.RoleProsecutor)},
+		{ID: "u-counselor", Username: "counselor", Password: "test-counselor-password", Role: string(auth.RoleCounselor)},
+	}
 	cfg.Storage.DataDir = dir
 	cfg.Auth.Required = false
 	logger := applog.New("error", "json")
@@ -108,7 +114,7 @@ func TestHandler_HealthzReady(t *testing.T) {
 
 func TestHandler_AuthLoginMeLogoutLifecycle(t *testing.T) {
 	ts, _, _ := setupHTTPTest(t)
-	loginResp := postJSON(t, ts, "/api/auth/login", `{"username":"prosecutor","password":"prosecutor-demo"}`)
+	loginResp := postJSON(t, ts, "/api/auth/login", `{"username":"prosecutor","password":"test-prosecutor-password"}`)
 	require.Equal(t, http.StatusOK, loginResp.StatusCode)
 	var login struct {
 		Token string `json:"token"`
